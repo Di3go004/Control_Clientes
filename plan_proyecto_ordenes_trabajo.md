@@ -28,7 +28,7 @@ Para no tener que releer toda la conversación mientras programas:
 - **Zona de captura:** de cada orden solo importan los encabezados, la descripción del trabajo a realizar, el número de certificado de calibración (si aplica) y la cotización.
 - **Base de datos:** ya diseñada y entregada — 4 tablas (`clientes`, `equipos`, `ordenes_trabajo`, `servicios`). Archivo: `soluciones_exactas_schema.sql`.
 - **Sistema de diseño:** "Precision Logic" — navy oscuro `#06007c` como primario, radios de 8px en tarjetas, pills en mayúsculas para estados, tipografía Inter. Ya aplicado a la primera pantalla en Figma.
-- **Stack recomendado (actualizado a despliegue local):** Next.js + Postgres, todo dockerizado y corriendo en un equipo dentro de la red de la empresa — sin servicios cloud de por medio, salvo la llamada saliente a la API de Claude para el reconocimiento. Un solo `docker-compose up` levanta la app y la base de datos juntas. Las imágenes de las capturas se guardan en un volumen local, no en storage en la nube. La base de datos la administras tú directo con DBeaver.
+- **Stack recomendado (actualizado a despliegue local):** Next.js + Postgres, todo dockerizado y corriendo en un equipo dentro de la red de la empresa — sin servicios cloud de por medio, salvo la llamada saliente a la API de Gemini (capa gratis) para el reconocimiento. Un solo `docker-compose up` levanta la app y la base de datos juntas. Las imágenes de las capturas se guardan en un volumen local, no en storage en la nube. La base de datos la administras tú directo con DBeaver.
 - **Acceso:** por IP:puerto dentro de la red de la empresa, igual que tu otra app. Confirmado: la captura siempre se sube desde la oficina (se genera ahí mismo al llenar la orden), así que la red local alcanza sin necesidad de VPN.
 
 ---
@@ -45,7 +45,7 @@ Para no tener que releer toda la conversación mientras programas:
 - [ ] Montar `soluciones_exactas_schema.sql` en `/docker-entrypoint-initdb.d/` del servicio `db` — la imagen oficial de Postgres lo corre sola la primera vez que se crea el contenedor, así la base queda lista sin pasos manuales
 - [ ] Exponer el puerto de Postgres (`5432:5432`) para conectarte con DBeaver directo a `localhost:5432` (o a la IP del equipo, si te conectas desde otra máquina)
 - [ ] Crear un volumen aparte para las imágenes de las capturas subidas (esto reemplaza el bucket de storage en la nube — ya no hace falta nada externo para esto)
-- [ ] Conseguir una API key de Anthropic en console.anthropic.com — es la única llamada que sale a internet en todo el esquema, el resto vive dentro de la red local
+- [ ] Conseguir una API key de Gemini en Google AI Studio (aistudio.google.com) — sin tarjeta de crédito, es la única llamada que sale a internet en todo el esquema, el resto vive dentro de la red local
 - [ ] Asignar una IP fija (o reserva DHCP desde el router) al equipo que corre la app, para que la dirección no cambie cuando el router se reinicie
 - [ ] Repositorio Git inicializado desde el día uno
 
@@ -65,7 +65,7 @@ Para no tener que releer toda la conversación mientras programas:
 
 **Objetivo:** poder guardar y leer datos por API, todavía sin IA ni pantallas — probando con JSON armado a mano.
 
-- [ ] Configurar el cliente de Supabase del lado del servidor (con la *service role key*, no la pública, para poder escribir sin restricciones mientras desarrollas)
+- [ ] Configurar el cliente de Postgres del lado del servidor (ej. con `pg` o un ORM como Prisma), apuntando al `DATABASE_URL` del contenedor `db`
 - [ ] Endpoint para crear una orden confirmada: recibe el JSON ya revisado (venga del flujo de IA o del ingreso manual) y lo procesa
 - [ ] Dentro de ese endpoint: por cada equipo mencionado, buscar en `equipos` por `serie` → si existe, usar ese `equipo_id`; si no, crear el equipo primero
 - [ ] Calcular el `estado` del servicio automáticamente al insertar (fecha vs. hoy)
@@ -80,12 +80,16 @@ Para no tener que releer toda la conversación mientras programas:
 
 Esta es la parte más nueva del proyecto, así que probablemente sea donde más vas a iterar.
 
+**Modelo y costo:** Gemini Flash / Flash-Lite, usando la capa gratis de Google AI Studio — sin tarjeta de crédito, con límites de uso diario muy por encima del volumen que vas a procesar. Se usa con una API key generada en aistudio.google.com.
+
+**A tener en cuenta:** en la capa gratis, Google puede usar las capturas que mandes para entrenar sus modelos — vale la pena documentarlo, ya que esas imágenes incluyen nombres de clientes y datos de sus equipos. Si en algún momento eso deja de ser aceptable, migrar a Claude Haiku de pago (unos centavos al mes, ver decisión anterior) es un cambio contenido — solo se toca esta fase, el resto del sistema no depende de qué modelo esté detrás.
+
 - [ ] Endpoint que reciba la imagen subida
-- [ ] Guardar la imagen en el bucket de Storage y conservar la URL (ya está contemplado en `ordenes_trabajo.imagen_url`, para trazabilidad)
-- [ ] Armar el prompt para la API de Claude: mandar la imagen y pedir **explícitamente** que devuelva solo JSON — con los campos del encabezado, la actividad, el certificado/cotización si aplica, y que identifique cuál de los 8 formatos es (por el código FO-XXX visible)
+- [ ] Guardar la imagen en el volumen local y conservar la ruta (ya está contemplado en `ordenes_trabajo.imagen_url`, para trazabilidad)
+- [ ] Armar el prompt para la API de Gemini: mandar la imagen y pedir **explícitamente** que devuelva solo JSON — con los campos del encabezado, la actividad, el certificado/cotización si aplica, y que identifique cuál de los 8 formatos es (por el código FO-XXX visible)
 - [ ] Pedirle también que separe la "descripción del trabajo" en una lista de equipos individuales (marca, modelo, serie, capacidad, código) — el patrón de texto es bastante consistente entre formatos, así que esto debería funcionar bien desde el primer intento
 - [ ] Devolver ese JSON al frontend para revisión — **nunca guardar directo sin que alguien confirme**, al menos mientras afinas la precisión
-- [ ] Ir probando con capturas reales variadas (buena luz, mala luz, distintos formatos) e ir ajustando el prompt según los errores que veas
+- [ ] Ir probando con capturas reales variadas (buena luz, mala luz, distintos formatos) e ir ajustando el prompt según los errores que veas — y estar atento al límite diario de la capa gratis por si el volumen real termina siendo mayor al esperado
 
 ---
 

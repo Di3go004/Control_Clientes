@@ -121,3 +121,39 @@ export interface CrearOrdenPayload {
 export interface ServicioConDetalle extends Servicio {
   equipo: Equipo & { cliente: Cliente };
 }
+
+// --- Tipos para la Fase 3: análisis de capturas con Gemini ---
+
+/** Un equipo tal como lo devuelve Gemini (texto libre, sin IDs) */
+export interface EquipoExtraido {
+  marca: string | null;
+  modelo: string | null;
+  serie: string | null;
+  capacidad: string | null;
+  codigo_interno: string | null;
+}
+
+/** Respuesta completa de GET /api/analizar */
+export interface ResultadoAnalisis {
+  imagen_url: string;
+  datos: DatosExtraidos;
+}
+
+/** JSON estructurado que devuelve Gemini tras analizar la captura */
+export interface DatosExtraidos {
+  tipo_formato: TipoFormato | null;
+  no_correlativo: string | null;
+  fecha: string | null;
+  nombre_cliente: string | null;   // texto libre — el usuario elige el cliente_id en la revisión
+  atencion_de: string | null;
+  tecnico: string | null;
+  elaboracion: string | null;
+  actividad: Actividad | null;
+  cod_cliente: string | null;
+  descripcion_trabajo: string | null;
+  no_certificado_calibracion: string | null;
+  cotizacion: string | null;
+  observaciones: string | null;
+  equipos: EquipoExtraido[];
+}
+
