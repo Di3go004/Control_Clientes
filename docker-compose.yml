@@ -1,0 +1,67 @@
+# ============================================================
+# docker-compose.yml — Soluciones Exactas
+# Levanta la app Next.js + PostgreSQL con un solo comando:
+#   docker-compose up -d
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # Servicio: base de datos PostgreSQL
+  # ----------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: soluciones_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Persistencia de datos entre reinicios del contenedor
+      - postgres_data:/var/lib/postgresql/data
+      # Schema SQL: se ejecuta automáticamente la primera vez que se crea el contenedor
+      - ./soluciones_exactas_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    ports:
+      # Expuesto para que puedas conectarte con DBeaver desde tu máquina
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------
+  # Servicio: aplicación Next.js
+  # ----------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    container_name: soluciones_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy  # espera a que Postgres esté listo antes de arrancar
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      NODE_ENV: production
+    volumes:
+      # Volumen local para las imágenes de capturas subidas
+      - uploads_data:/app/uploads
+    ports:
+      # Acceso por IP:puerto dentro de la red de la empresa
+      - "3000:3000"
+
+# ----------------------------------------------------------
+# Volúmenes nombrados (persisten entre docker-compose down/up)
+# ----------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
