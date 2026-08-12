@@ -87,22 +87,25 @@ export async function POST(req: NextRequest) {
         },
       ],
       config: {
-        temperature: 0,       // máxima determinismo — no queremos creatividad
-        maxOutputTokens: 2048,
+        temperature: 0.1, // Evitar 0 absoluto, a veces causa cortes abruptos en algunos modelos
+        // Eliminamos maxOutputTokens para usar el máximo por defecto del modelo
       },
     });
 
     const textoRespuesta = respuesta.text ?? "";
+    const finishReason = respuesta.candidates?.[0]?.finishReason;
 
     // 5. Parsear el JSON devuelto por Gemini
     const datosExtraidos = extraerJSON(textoRespuesta);
 
     if (!datosExtraidos) {
-      console.error("[/api/analizar] Respuesta de Gemini no parseable:", textoRespuesta);
+      console.error("[/api/analizar] Respuesta de Gemini no parseable. Razón de corte:", finishReason);
+      console.error("Texto devuelto:", textoRespuesta);
       return NextResponse.json(
         {
-          error: "Gemini no devolvió un JSON válido. Intenta con una imagen más nítida.",
-          rawResponse: textoRespuesta, // incluido para debug durante la iteración
+          error: "Gemini devolvió una respuesta incompleta o inválida. Intenta nuevamente.",
+          rawResponse: textoRespuesta,
+          finishReason,
         },
         { status: 422 }
       );

@@ -1,6 +1,6 @@
 "use client";
 // src/app/subir/page.tsx — Subir captura y analizar con Gemini
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function SubirCaptura() {
@@ -12,16 +12,35 @@ export default function SubirCaptura() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [isDragging, setIsDragging] = useState(false);
+
   function handleArchivo(file: File) {
     setArchivo(file);
     setPreview(URL.createObjectURL(file));
     setError(null);
   }
 
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) handleArchivo(file);
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleArchivo(e.dataTransfer.files[0]);
+      e.dataTransfer.clearData();
+    }
   }
 
   async function handleAnalizar() {
@@ -52,6 +71,17 @@ export default function SubirCaptura() {
     }
   }
 
+  // Prevenir que el navegador abra la imagen si se suelta por accidente fuera de la zona
+  useEffect(() => {
+    function preventGlobal(e: DragEvent) { e.preventDefault(); }
+    window.addEventListener("dragover", preventGlobal);
+    window.addEventListener("drop", preventGlobal);
+    return () => {
+      window.removeEventListener("dragover", preventGlobal);
+      window.removeEventListener("drop", preventGlobal);
+    };
+  }, []);
+
   return (
     <>
       <h1>Subir captura</h1>
@@ -62,13 +92,21 @@ export default function SubirCaptura() {
       {/* Zona de carga */}
       {!preview ? (
         <div
-          className="upload-zone"
+          className={`upload-zone ${isDragging ? "active" : ""}`}
+          style={{ 
+            borderColor: isDragging ? "var(--navy)" : "var(--border)",
+            backgroundColor: isDragging ? "rgba(6, 0, 124, 0.05)" : "transparent" 
+          }}
           onClick={() => inputRef.current?.click()}
+          onDragEnter={handleDragOver}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onDragOver={(e) => e.preventDefault()}
         >
           <div style={{ fontSize: 40, marginBottom: 12 }}>📎</div>
-          <p style={{ fontWeight: 600 }}>Haz clic o arrastra la captura aquí</p>
+          <p style={{ fontWeight: 600 }}>
+            {isDragging ? "¡Suelta la imagen ahora!" : "Haz clic o arrastra la captura aquí"}
+          </p>
           <p style={{ fontSize: 12, marginTop: 6 }}>JPG, PNG o WEBP · máximo 10 MB</p>
           <input
             ref={inputRef}
