@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CloudUpload, X, ScanSearch, Loader2, AlertCircle, FileImage, CheckCircle2 } from "lucide-react";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 
 export default function SubirCaptura() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -11,7 +12,7 @@ export default function SubirCaptura() {
   const [archivo, setArchivo] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useAutoDismiss<string>();
   const [isDragging, setIsDragging] = useState(false);
 
   function handleArchivo(file: File) {

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, ArrowLeft, Plus, Trash2, CheckCircle2, AlertCircle, Info, Loader2 } from "lucide-react";
 import type { DatosExtraidos, EquipoExtraido, TipoFormato, Actividad, Cliente } from "@/types";
+import { FRECUENCIAS } from "@/lib/calcularProximoServicio";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 
 const FORMATOS: TipoFormato[] = [
   "FO-IPFNA-007","FO-IPFNA-008","FO-IPFNA-009",
@@ -23,7 +25,7 @@ export default function RevisarDatos() {
   const [imagenUrl, setImagenUrl] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useAutoDismiss<string>();
   const [exito, setExito] = useState(false);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export default function RevisarDatos() {
   }
 
   function addEquipo() {
-    setForm(prev => prev ? { ...prev, equipos: [...prev.equipos, { marca: null, modelo: null, serie: null, capacidad: null, codigo_interno: null }] } : prev);
+    setForm(prev => prev ? { ...prev, equipos: [...prev.equipos, { marca: null, modelo: null, serie: null, capacidad: null, codigo_interno: null, frecuencia: null }] } : prev);
   }
 
   function removeEquipo(idx: number) {
@@ -252,7 +254,14 @@ export default function RevisarDatos() {
                 <div className="field"><label>Modelo</label><input value={eq.modelo ?? ""} onChange={e => setEquipo(idx, "modelo", e.target.value)} /></div>
                 <div className="field"><label>Serie</label><input value={eq.serie ?? ""} placeholder="S/S si no tiene" onChange={e => setEquipo(idx, "serie", e.target.value)} /></div>
                 <div className="field"><label>Capacidad</label><input value={eq.capacidad ?? ""} onChange={e => setEquipo(idx, "capacidad", e.target.value)} /></div>
-                <div className="field span-2"><label>Código interno</label><input value={eq.codigo_interno ?? ""} onChange={e => setEquipo(idx, "codigo_interno", e.target.value)} /></div>
+                <div className="field"><label>Código interno</label><input value={eq.codigo_interno ?? ""} onChange={e => setEquipo(idx, "codigo_interno", e.target.value)} /></div>
+                <div className="field">
+                  <label>Frecuencia</label>
+                  <select value={eq.frecuencia ?? ""} onChange={e => setEquipo(idx, "frecuencia", e.target.value)}>
+                    <option value="">— Sin asignar —</option>
+                    {FRECUENCIAS.map(f => <option key={f.valor} value={f.valor}>{f.label}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
           ))}

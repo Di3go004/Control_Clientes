@@ -1,11 +1,14 @@
 "use client";
 // src/app/seguimiento/page.tsx — Vista de seguimiento de equipos y servicios
-import { useEffect, useState, useCallback } from "react";
-import { Search, CheckCircle2, Clock, AlertCircle, Award, Pencil, Check, X, Loader2 } from "lucide-react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { Search, CheckCircle2, Clock, AlertCircle, Award, Pencil, Check, X, Loader2, FileSpreadsheet } from "lucide-react";
 import type { EstadoServicio } from "@/types";
+import { calcularProximoServicio, FRECUENCIAS } from "@/lib/calcularProximoServicio";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 
 interface ServicioFila {
   id: number;
+  equipo_id: number;
   nombre_empresa: string;
   region: string | null;
   marca: string | null;
@@ -63,7 +66,7 @@ export default function Seguimiento() {
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [draft, setDraft] = useState<DraftEdicion | null>(null);
   const [guardandoId, setGuardandoId] = useState<number | null>(null);
-  const [errorEdicion, setErrorEdicion] = useState<string | null>(null);
+  const [errorEdicion, setErrorEdicion] = useAutoDismiss<string>();
 
   function iniciarEdicion(fila: ServicioFila) {
     setErrorEdicion(null);
@@ -121,6 +124,39 @@ export default function Seguimiento() {
     }
   }
 
+  // Edición de la frecuencia — es un dato del EQUIPO, no del servicio,
+  // así que va contra /api/equipos/:id y actualiza todas las filas que
+  // compartan ese equipo_id (un mismo equipo puede tener varias filas,
+  // una por cada servicio de su historial).
+  const [editandoFrecuenciaEquipoId, setEditandoFrecuenciaEquipoId] = useState<number | null>(null);
+  const [guardandoFrecuenciaId, setGuardandoFrecuenciaId] = useState<number | null>(null);
+
+  async function guardarFrecuencia(equipoId: number, frecuencia: string) {
+    setGuardandoFrecuenciaId(equipoId);
+    setErrorEdicion(null);
+
+    try {
+      const res = await fetch(`/api/equipos/${equipoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frecuencia: frecuencia || null }),
+      });
+
+      if (!res.ok) {
+        const d = await res.json();
+        setErrorEdicion(d.error ?? "No se pudo guardar la frecuencia.");
+        return;
+      }
+
+      setServicios(prev => prev.map(s => s.equipo_id === equipoId ? { ...s, frecuencia: frecuencia || null } : s));
+      setEditandoFrecuenciaEquipoId(null);
+    } catch {
+      setErrorEdicion("Error de red al guardar la frecuencia.");
+    } finally {
+      setGuardandoFrecuenciaId(null);
+    }
+  }
+
   const cargar = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -149,6 +185,34 @@ export default function Seguimiento() {
     );
   });
 
+  // "Próximo estimado" solo se calcula sobre la fila más reciente REALIZADA
+  // de cada equipo — así cada equipo muestra un único próximo estimado, en
+  // vez de que cada fila vieja de su historial calcule su propia fecha
+  // (que ya habría quedado atrás en el tiempo). Mapa: id de fila → fecha.
+  const proximoPorEquipo = useMemo(() => {
+    const masReciente = new Map<number, ServicioFila>();
+    for (const s of servicios) {
+      if (s.estado !== "REALIZADO") continue;
+      const actual = masReciente.get(s.equipo_id);
+      if (!actual || s.fecha > actual.fecha) masReciente.set(s.equipo_id, s);
+    }
+    const resultado = new Map<number, string>();
+    for (const fila of masReciente.values()) {
+      const proxima = calcularProximoServicio(fila.fecha, fila.frecuencia);
+      if (proxima) resultado.set(fila.id, proxima);
+    }
+    return resultado;
+  }, [servicios]);
+
+  // Exportar respeta el filtro de estado y la búsqueda actuales — lo que
+  // se ve en pantalla es lo que se descarga.
+  function urlExportar() {
+    const params = new URLSearchParams();
+    if (filtroEstado !== "TODOS") params.set("estado", filtroEstado);
+    if (busqueda) params.set("q", busqueda);
+    return `/api/servicios/exportar?${params}`;
+  }
+
   return (
     <>
       <h1>Seguimiento de servicios</h1>
@@ -168,21 +232,32 @@ export default function Seguimiento() {
           ))}
         </div>
 
-        {/* Campo de búsqueda con ícono */}
-        <div style={{ position: "relative" }}>
-          <Search
-            size={14}
-            color="var(--muted)"
-            strokeWidth={2}
-            style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
-          />
-          <input
-            type="search"
-            placeholder="Buscar cliente, marca, serie…"
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
-            style={{ width: 260, paddingLeft: 32 }}
-          />
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {/* Campo de búsqueda con ícono */}
+          <div style={{ position: "relative" }}>
+            <Search
+              size={14}
+              color="var(--muted)"
+              strokeWidth={2}
+              style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
+            />
+            <input
+              type="search"
+              placeholder="Buscar cliente, marca, serie…"
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              style={{ width: 260, paddingLeft: 32 }}
+            />
+          </div>
+
+          <a
+            href={urlExportar()}
+            className="btn btn-secondary btn-sm"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none", whiteSpace: "nowrap" }}
+            title="Descarga lo que se ve en esta tabla como Excel"
+          >
+            <FileSpreadsheet size={14} strokeWidth={2} /> Exportar a Excel
+          </a>
         </div>
       </div>
 
@@ -210,6 +285,7 @@ export default function Seguimiento() {
           <span>Sin resultados para los filtros aplicados.</span>
         </div>
       ) : (
+        <div style={{ overflowX: "auto" }}>
         <table>
           <thead>
             <tr>
@@ -217,10 +293,12 @@ export default function Seguimiento() {
               <th>Equipo</th>
               <th>Serie</th>
               <th>Capacidad</th>
+              <th>Frecuencia</th>
               <th>Formato</th>
               <th>Técnico</th>
               <th>Fecha servicio</th>
               <th>Estado</th>
+              <th>Próximo estimado</th>
               <th>Certificado</th>
               <th></th>
             </tr>
@@ -228,6 +306,7 @@ export default function Seguimiento() {
           <tbody>
             {filas.map(s => {
               const d = editandoId === s.id ? draft : null;
+              const proximo = proximoPorEquipo.get(s.id);
               return (
                 <tr key={s.id}>
                   <td>
@@ -239,6 +318,37 @@ export default function Seguimiento() {
                     {s.serie ?? <span style={{ color: "var(--muted)", fontStyle: "italic" }}>S/S</span>}
                   </td>
                   <td style={{ fontSize: 12 }}>{s.capacidad ?? "—"}</td>
+
+                  {/* Frecuencia — es del equipo, se guarda apenas cambia el <select> */}
+                  <td>
+                    {editandoFrecuenciaEquipoId === s.equipo_id ? (
+                      <select
+                        autoFocus
+                        defaultValue={s.frecuencia ?? ""}
+                        disabled={guardandoFrecuenciaId === s.equipo_id}
+                        onChange={e => guardarFrecuencia(s.equipo_id, e.target.value)}
+                        onBlur={() => setEditandoFrecuenciaEquipoId(null)}
+                        style={{ fontSize: 12, padding: "4px 6px" }}
+                      >
+                        <option value="">— Sin asignar —</option>
+                        {FRECUENCIAS.map(f => <option key={f.valor} value={f.valor}>{f.label}</option>)}
+                      </select>
+                    ) : (
+                      <button
+                        onClick={() => setEditandoFrecuenciaEquipoId(s.equipo_id)}
+                        title="Editar frecuencia de este equipo"
+                        style={{
+                          background: "none", border: "none", cursor: "pointer", padding: 0,
+                          fontSize: 12, color: s.frecuencia ? "var(--text-variant)" : "var(--muted)",
+                          fontStyle: s.frecuencia ? "normal" : "italic",
+                          textDecoration: "underline dotted", textUnderlineOffset: 3,
+                        }}
+                      >
+                        {s.frecuencia ?? "Sin asignar"}
+                      </button>
+                    )}
+                  </td>
+
                   <td>
                     <code style={{ fontSize: 11, background: "var(--surface-high)", padding: "2px 6px", borderRadius: 3 }}>
                       {s.tipo_formato}
@@ -272,6 +382,15 @@ export default function Seguimiento() {
                       </select>
                     ) : (
                       <span className={badgeClass(s.estado)}>{s.estado}</span>
+                    )}
+                  </td>
+
+                  {/* Próximo estimado — calculado (última fecha REALIZADA + frecuencia), no se guarda en ningún lado */}
+                  <td>
+                    {proximo ? (
+                      <span style={{ fontSize: 12, color: "var(--text-variant)" }}>{formatFecha(proximo)}</span>
+                    ) : (
+                      <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>
                     )}
                   </td>
 
@@ -334,6 +453,7 @@ export default function Seguimiento() {
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       {!loading && filas.length > 0 && (

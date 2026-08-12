@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, X, Plus, Trash2, CheckCircle2, AlertCircle, Loader2, Gauge, Wrench, Cpu } from "lucide-react";
 import type { TipoFormato, Actividad, Cliente } from "@/types";
+import { FRECUENCIAS } from "@/lib/calcularProximoServicio";
+import { useAutoDismiss } from "@/hooks/useAutoDismiss";
 
 const FORMATOS: { codigo: TipoFormato; label: string; grupo: string }[] = [
   { codigo: "FO-IPFNA-007", label: "007 – Calibración", grupo: "Calibración" },
@@ -19,8 +21,8 @@ const FORMATOS: { codigo: TipoFormato; label: string; grupo: string }[] = [
 const GRUPOS = ["Calibración", "Servicio técnico", "Equipo especial"];
 const ACTIVIDADES: Actividad[] = ["CALIBRACIÓN", "SERVICIO TÉCNICO"];
 
-type EquipoForm = { marca: string; modelo: string; serie: string; capacidad: string; codigo_interno: string };
-const equipoVacio = (): EquipoForm => ({ marca: "", modelo: "", serie: "", capacidad: "", codigo_interno: "" });
+type EquipoForm = { marca: string; modelo: string; serie: string; capacidad: string; codigo_interno: string; frecuencia: string };
+const equipoVacio = (): EquipoForm => ({ marca: "", modelo: "", serie: "", capacidad: "", codigo_interno: "", frecuencia: "" });
 
 export default function IngresoManual() {
   const router = useRouter();
@@ -40,7 +42,7 @@ export default function IngresoManual() {
   const [observaciones, setObservaciones] = useState("");
   const [equipos, setEquipos] = useState<EquipoForm[]>([equipoVacio()]);
   const [guardando, setGuardando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useAutoDismiss<string>();
   const [exito, setExito] = useState(false);
 
   useEffect(() => {
@@ -99,6 +101,7 @@ export default function IngresoManual() {
           serie: eq.serie || null,
           capacidad: eq.capacidad || null,
           codigo_interno: eq.codigo_interno || null,
+          frecuencia: eq.frecuencia || null,
         })),
       };
 
@@ -319,7 +322,14 @@ export default function IngresoManual() {
                     <div className="field"><label>Modelo</label><input value={eq.modelo} onChange={e => setEquipoField(idx, "modelo", e.target.value)} /></div>
                     <div className="field"><label>Serie</label><input value={eq.serie} placeholder="S/S si no tiene" onChange={e => setEquipoField(idx, "serie", e.target.value)} /></div>
                     <div className="field"><label>Capacidad</label><input value={eq.capacidad} onChange={e => setEquipoField(idx, "capacidad", e.target.value)} /></div>
-                    <div className="field span-2"><label>Código interno</label><input value={eq.codigo_interno} onChange={e => setEquipoField(idx, "codigo_interno", e.target.value)} /></div>
+                    <div className="field"><label>Código interno</label><input value={eq.codigo_interno} onChange={e => setEquipoField(idx, "codigo_interno", e.target.value)} /></div>
+                    <div className="field">
+                      <label>Frecuencia</label>
+                      <select value={eq.frecuencia} onChange={e => setEquipoField(idx, "frecuencia", e.target.value)}>
+                        <option value="">— Sin asignar —</option>
+                        {FRECUENCIAS.map(f => <option key={f.valor} value={f.valor}>{f.label}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
               ))}

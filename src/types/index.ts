@@ -131,6 +131,9 @@ export interface EquipoExtraido {
   serie: string | null;
   capacidad: string | null;
   codigo_interno: string | null;
+  // Gemini nunca la extrae (no viene en el papel) — la asigna la persona
+  // que revisa, a mano, en la pantalla de revisión.
+  frecuencia: string | null;
 }
 
 /** Respuesta completa de GET /api/analizar */
