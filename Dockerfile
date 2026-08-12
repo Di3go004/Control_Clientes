@@ -20,7 +20,6 @@ COPY . .
 
 # Variables requeridas en tiempo de build
 ARG DATABASE_URL
-ARG ANTHROPIC_API_KEY
 
 ENV NEXT_TELEMETRY_DISABLED=1
 

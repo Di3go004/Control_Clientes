@@ -1,7 +1,11 @@
 # ============================================================
 # docker-compose.yml — Soluciones Exactas
 # Levanta la app Next.js + PostgreSQL con un solo comando:
-#   docker-compose up -d
+#   docker compose up -d
+#
+# Requiere un archivo ".env" (no ".env.local" — ese lo lee Next.js,
+# no docker-compose) en esta misma carpeta con las variables de abajo.
+# Copia .env.example a .env y rellena los valores reales.
 # ============================================================
 
 services:
@@ -40,7 +44,6 @@ services:
       dockerfile: Dockerfile
       args:
         DATABASE_URL: ${DATABASE_URL}
-        ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     container_name: soluciones_app
     restart: unless-stopped
     depends_on:
@@ -48,7 +51,7 @@ services:
         condition: service_healthy  # espera a que Postgres esté listo antes de arrancar
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       NODE_ENV: production
     volumes:
       # Volumen local para las imágenes de capturas subidas

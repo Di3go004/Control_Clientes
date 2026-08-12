@@ -2,6 +2,7 @@
 // src/app/revisar/page.tsx — Revisión y confirmación de datos extraídos por IA
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Save, ArrowLeft, Plus, Trash2, CheckCircle2, AlertCircle, Info, Loader2 } from "lucide-react";
 import type { DatosExtraidos, EquipoExtraido, TipoFormato, Actividad, Cliente } from "@/types";
 
 const FORMATOS: TipoFormato[] = [
@@ -34,6 +35,10 @@ export default function RevisarDatos() {
     if (!raw) { router.replace("/subir"); return; }
 
     const { datos, imagen_url }: { datos: DatosExtraidos; imagen_url: string } = JSON.parse(raw);
+    // Deriva el estado inicial del formulario a partir de sessionStorage al
+    // montar — junto con el redirect de arriba, es un solo efecto de "cargar
+    // lo que vino de /subir", no algo separable en render puro.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setImagenUrl(imagen_url);
     setForm({ ...datos, cliente_id: "" });
   }, [router]);
@@ -112,14 +117,46 @@ export default function RevisarDatos() {
   }
 
   if (!form) return <p style={{ color: "var(--muted)" }}>Cargando datos…</p>;
-  if (exito) return <div className="alert alert-success">✅ Orden guardada correctamente. Redirigiendo…</div>;
+  if (exito) return (
+    <div className="alert alert-success">
+      <CheckCircle2 size={16} strokeWidth={2} style={{ flexShrink: 0 }} />
+      Orden guardada correctamente. Redirigiendo…
+    </div>
+  );
 
   return (
     <>
       <h1>Revisar datos extraídos</h1>
-      <div className="alert alert-info">⚠ Verifica que los datos sean correctos antes de guardar. Puedes editar cualquier campo.</div>
+      <div className="alert alert-info">
+        <Info size={15} strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }} />
+        Verifica que los datos sean correctos antes de guardar. Puedes editar cualquier campo.
+      </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <div className="alert alert-error">
+          <AlertCircle size={15} strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }} />
+          {error}
+        </div>
+      )}
+
+      {/* --- Captura original: compararla contra lo extraído antes de guardar --- */}
+      {imagenUrl && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h2>Captura original</h2>
+          <img
+            src={imagenUrl}
+            alt="Captura original de la orden de trabajo"
+            style={{
+              width: "100%",
+              maxHeight: 420,
+              objectFit: "contain",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              background: "var(--surface-low)",
+            }}
+          />
+        </div>
+      )}
 
       {/* --- Encabezado --- */}
       <div className="card">
@@ -131,7 +168,7 @@ export default function RevisarDatos() {
               <option value="">— Selecciona cliente —</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_empresa}</option>)}
             </select>
-            {form.nombre_cliente && <small style={{ color: "var(--muted)", marginTop: 2 }}>Gemini detectó: "{form.nombre_cliente}"</small>}
+            {form.nombre_cliente && <small style={{ color: "var(--muted)", marginTop: 2 }}>Gemini detectó: &quot;{form.nombre_cliente}&quot;</small>}
           </div>
           <div className="field">
             <label>Tipo de formato *</label>
@@ -194,7 +231,9 @@ export default function RevisarDatos() {
       <div className="card section-gap">
         <div className="row-between" style={{ marginBottom: 14 }}>
           <h2 style={{ margin: 0 }}>Equipos detectados ({form.equipos.length})</h2>
-          <button className="btn btn-secondary btn-sm" onClick={addEquipo}>+ Agregar equipo</button>
+          <button className="btn btn-secondary btn-sm" onClick={addEquipo} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Plus size={13} strokeWidth={2.5} /> Agregar equipo
+          </button>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -203,7 +242,9 @@ export default function RevisarDatos() {
               <div className="equipo-header">
                 <strong style={{ fontSize: 13 }}>Equipo {idx + 1}</strong>
                 {form.equipos.length > 1 && (
-                  <button className="btn btn-danger btn-sm" onClick={() => removeEquipo(idx)}>× Quitar</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => removeEquipo(idx)} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <Trash2 size={12} strokeWidth={2} /> Quitar
+                  </button>
                 )}
               </div>
               <div className="form-grid cols-2" style={{ gap: 10 }}>
@@ -220,11 +261,17 @@ export default function RevisarDatos() {
 
       {/* Botones */}
       <div className="row" style={{ justifyContent: "flex-end", marginTop: 20, gap: 12 }}>
-        <button className="btn btn-secondary" onClick={() => router.push("/subir")}>← Volver</button>
-        <button className="btn btn-primary" onClick={handleGuardar} disabled={guardando}>
-          {guardando ? "Guardando…" : "💾 Guardar orden"}
+        <button className="btn btn-secondary" onClick={() => router.push("/subir")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <ArrowLeft size={15} strokeWidth={2} /> Volver
+        </button>
+        <button className="btn btn-primary" onClick={handleGuardar} disabled={guardando} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {guardando
+            ? <><Loader2 size={15} strokeWidth={2} style={{ animation: "spin 1s linear infinite" }} /> Guardando…</>
+            : <><Save size={15} strokeWidth={2} /> Guardar orden</>
+          }
         </button>
       </div>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </>
   );
 }

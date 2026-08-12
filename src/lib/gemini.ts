@@ -1,7 +1,8 @@
 // ============================================================
 // src/lib/gemini.ts
 // Cliente de Gemini compartido para toda la app.
-// Modelo: gemini-2.0-flash (multimodal, capa gratuita de AI Studio)
+// Modelo: ver constante MODELO abajo — es el único lugar que hay
+// que tocar para cambiar de versión (ej. si Google retira una).
 // ============================================================
 
 import { GoogleGenAI } from "@google/genai";

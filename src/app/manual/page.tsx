@@ -2,6 +2,7 @@
 // src/app/manual/page.tsx — Ingreso manual de órdenes de trabajo
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Save, X, Plus, Trash2, CheckCircle2, AlertCircle, Loader2, Gauge, Wrench, Cpu } from "lucide-react";
 import type { TipoFormato, Actividad, Cliente } from "@/types";
 
 const FORMATOS: { codigo: TipoFormato; label: string; grupo: string }[] = [
@@ -48,6 +49,20 @@ export default function IngresoManual() {
 
   const formatoInfo = FORMATOS.find(f => f.codigo === formato);
   const esCalibración = formatoInfo?.grupo === "Calibración";
+  // Los formatos IPFNA (calibración pura) no llevan tabla de equipo/repuestos
+  // en el papel — siempre es un solo instrumento por orden, a diferencia de
+  // servicio técnico/equipo especial, que sí pueden traer varios.
+  const permiteMultiplesEquipos = !esCalibración;
+
+  // Al elegir un formato, si es de calibración y ya había más de un equipo
+  // cargado (por haber tenido antes un formato de servicio técnico
+  // seleccionado), recorta a uno solo para no dejar el formulario inconsistente.
+  function seleccionarFormato(f: (typeof FORMATOS)[number]) {
+    setFormato(f.codigo);
+    if (f.grupo === "Calibración") {
+      setEquipos(prev => (prev.length > 1 ? prev.slice(0, 1) : prev));
+    }
+  }
 
   function setEquipoField(idx: number, key: keyof EquipoForm, val: string) {
     setEquipos(prev => { const eq = [...prev]; eq[idx] = { ...eq[idx], [key]: val }; return eq; });
@@ -108,33 +123,104 @@ export default function IngresoManual() {
     }
   }
 
-  if (exito) return <div className="alert alert-success">✅ Orden guardada correctamente. Redirigiendo…</div>;
+  if (exito) return (
+    <div className="alert alert-success">
+      <CheckCircle2 size={16} strokeWidth={2} style={{ flexShrink: 0 }} />
+      Orden guardada correctamente. Redirigiendo…
+    </div>
+  );
 
   return (
     <>
       <h1>Ingreso manual</h1>
       <p className="subtitle">Ingresa los datos de la orden directamente. Elige el formato primero.</p>
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <div className="alert alert-error">
+          <AlertCircle size={15} strokeWidth={2} style={{ flexShrink: 0, marginTop: 1 }} />
+          {error}
+        </div>
+      )}
 
-      {/* Selector de formato */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h2>Tipo de formato</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-          {GRUPOS.map(grupo => (
-            <div key={grupo}>
-              <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>{grupo}</p>
-              {FORMATOS.filter(f => f.grupo === grupo).map(f => (
-                <button
-                  key={f.codigo}
-                  className={`btn btn-sm ${formato === f.codigo ? "btn-primary" : "btn-secondary"}`}
-                  style={{ display: "block", width: "100%", marginBottom: 4, textAlign: "left" }}
-                  onClick={() => setFormato(f.codigo)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          ))}
+      {/* ── Selector de formato ── */}
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ marginBottom: 16 }}>Selecciona el tipo de formato</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {GRUPOS.map((grupo, gi) => {
+            const icono = [Gauge, Wrench, Cpu][gi];
+            const Icono = icono;
+            const colores = [
+              { borde: "var(--primary-mid)", fondo: "rgba(6,0,124,.06)", txt: "var(--primary-mid)" },
+              { borde: "var(--secondary)",   fondo: "rgba(25,101,132,.06)", txt: "var(--secondary)" },
+              { borde: "#6b21a8",            fondo: "rgba(107,33,168,.06)", txt: "#6b21a8" },
+            ][gi];
+            const formatosDel = FORMATOS.filter(f => f.grupo === grupo);
+            const seleccionadoEnGrupo = formatosDel.find(f => f.codigo === formato);
+
+            return (
+              <div key={grupo} className="card" style={{
+                padding: 0,
+                overflow: "hidden",
+                border: seleccionadoEnGrupo ? `2px solid ${colores.borde}` : "1px solid var(--border)",
+                transition: "border-color .15s",
+              }}>
+                {/* Cabecera del grupo */}
+                <div style={{
+                  padding: "14px 16px 12px",
+                  background: seleccionadoEnGrupo ? colores.fondo : "var(--surface-low)",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  transition: "background .15s",
+                }}>
+                  <Icono size={16} color={colores.borde} strokeWidth={1.8} />
+                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: colores.txt }}>
+                    {grupo}
+                  </span>
+                </div>
+
+                {/* Lista de formatos */}
+                <div style={{ padding: "8px" }}>
+                  {formatosDel.map(f => {
+                    const activo = formato === f.codigo;
+                    return (
+                      <button
+                        key={f.codigo}
+                        onClick={() => seleccionarFormato(f)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          width: "100%",
+                          padding: "8px 10px",
+                          marginBottom: 4,
+                          borderRadius: "var(--radius-sm)",
+                          border: activo ? `1px solid ${colores.borde}` : "1px solid transparent",
+                          background: activo ? colores.fondo : "transparent",
+                          color: activo ? colores.txt : "var(--text)",
+                          fontSize: 13,
+                          fontWeight: activo ? 600 : 400,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          transition: "all .12s",
+                          textAlign: "left",
+                        }}
+                        onMouseEnter={e => {
+                          if (!activo) (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-high)";
+                        }}
+                        onMouseLeave={e => {
+                          if (!activo) (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                        }}
+                      >
+                        <span><code style={{ fontSize: 11, opacity: .65, marginRight: 6 }}>{f.codigo}</code>{f.label.split(" – ")[1]}</span>
+                        {activo && <CheckCircle2 size={14} color={colores.borde} strokeWidth={2.5} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -209,7 +295,13 @@ export default function IngresoManual() {
           <div className="card" style={{ marginBottom: 20 }}>
             <div className="row-between" style={{ marginBottom: 14 }}>
               <h2 style={{ margin: 0 }}>Equipos ({equipos.length})</h2>
-              <button className="btn btn-secondary btn-sm" onClick={() => setEquipos(prev => [...prev, equipoVacio()])}>+ Agregar equipo</button>
+              {permiteMultiplesEquipos ? (
+                <button className="btn btn-secondary btn-sm" onClick={() => setEquipos(prev => [...prev, equipoVacio()])} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Plus size={13} strokeWidth={2.5} /> Agregar equipo
+                </button>
+              ) : (
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>Este formato es de un solo equipo</span>
+              )}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               {equipos.map((eq, idx) => (
@@ -217,7 +309,9 @@ export default function IngresoManual() {
                   <div className="equipo-header">
                     <strong style={{ fontSize: 13 }}>Equipo {idx + 1}</strong>
                     {equipos.length > 1 && (
-                      <button className="btn btn-danger btn-sm" onClick={() => setEquipos(prev => prev.filter((_, i) => i !== idx))}>× Quitar</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setEquipos(prev => prev.filter((_, i) => i !== idx))} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Trash2 size={12} strokeWidth={2} /> Quitar
+                      </button>
                     )}
                   </div>
                   <div className="form-grid cols-2" style={{ gap: 10 }}>
@@ -233,11 +327,17 @@ export default function IngresoManual() {
           </div>
 
           <div className="row" style={{ justifyContent: "flex-end", gap: 12 }}>
-            <button className="btn btn-secondary" onClick={() => router.push("/")}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleGuardar} disabled={guardando}>
-              {guardando ? "Guardando…" : "💾 Guardar orden"}
+            <button className="btn btn-secondary" onClick={() => router.push("/")} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <X size={15} strokeWidth={2} /> Cancelar
+            </button>
+            <button className="btn btn-primary" onClick={handleGuardar} disabled={guardando} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {guardando
+                ? <><Loader2 size={15} strokeWidth={2} style={{ animation: "spin 1s linear infinite" }} /> Guardando…</>
+                : <><Save size={15} strokeWidth={2} /> Guardar orden</>
+              }
             </button>
           </div>
+          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </>
       )}
     </>

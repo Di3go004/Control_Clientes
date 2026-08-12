@@ -1,24 +1,52 @@
 "use client";
 // src/components/NavSidebar.tsx
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import Imglogo from "../assets/logo.png";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, Camera, PenLine, ClipboardList } from "lucide-react";
+import Imglogo from "../assets/logo.png";
+
+const NAV_ITEMS = [
+  { href: "/",            label: "Inicio",          icon: LayoutDashboard },
+  { href: "/subir",       label: "Subir captura",   icon: Camera },
+  { href: "/manual",      label: "Ingreso manual",  icon: PenLine },
+  { href: "/seguimiento", label: "Seguimiento",     icon: ClipboardList },
+];
 
 export default function NavSidebar() {
   const path = usePathname();
   const isActive = (href: string) =>
-    path === href || (href !== "/" && path.startsWith(href));
+    href === "/" ? path === "/" : path.startsWith(href);
 
   return (
     <nav className="sidebar">
+      {/* ── Logo ── */}
       <div className="sidebar-logo">
-        <Image src={Imglogo} alt="Logo" width={150} height={150} />
+        <Image
+          src={Imglogo}
+          alt="Soluciones Exactas S.A."
+          width={140}
+          height={140}
+          style={{ objectFit: "contain" }}
+          loading="eager"
+        />
       </div>
-      <Link href="/"           className={isActive("/") && path === "/" ? "active" : ""}>🏠 Inicio</Link>
-      <Link href="/subir"      className={isActive("/subir")      ? "active" : ""}>📷 Subir captura</Link>
-      <Link href="/manual"     className={isActive("/manual")     ? "active" : ""}>✏️ Ingreso manual</Link>
-      <Link href="/seguimiento"className={isActive("/seguimiento") ? "active" : ""}>📋 Seguimiento</Link>
+
+      {/* ── Navegación ── */}
+      <div className="sidebar-nav">
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
+          <Link key={href} href={href} className={isActive(href) ? "active" : ""}>
+            <Icon size={16} strokeWidth={1.8} />
+            {label}
+          </Link>
+        ))}
+      </div>
+
+      {/* ── Footer copyright ── */}
+      <div className="sidebar-footer">
+        © 2026 Soluciones Exactas S.A.<br />
+        Todos los derechos reservados.
+      </div>
     </nav>
   );
 }

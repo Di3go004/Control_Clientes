@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Soluciones Exactas — Órdenes de Trabajo
 
-## Getting Started
+App interna para digitalizar el control de equipos y servicios de calibración/servicio técnico: reemplaza el Excel de control, con reconocimiento por IA de las capturas de las órdenes de trabajo en papel.
 
-First, run the development server:
+El plan completo del proyecto está en [Docs/plan_proyecto_ordenes_trabajo.md](Docs/plan_proyecto_ordenes_trabajo.md); el schema de base de datos en [soluciones_exactas_schema.sql](soluciones_exactas_schema.sql).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Stack
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Next.js (App Router) + PostgreSQL + Gemini (reconocimiento de capturas), todo pensado para correr dentro de la red de la empresa, dockerizado.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Cómo correr esto
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Hay dos formas de levantarlo. Las dos necesitan un archivo de variables de entorno con los mismos valores (ver [.env.example](.env.example)) — la diferencia es **cuál archivo** y **el host de la base de datos**, porque Next.js y docker-compose no leen el mismo archivo por defecto.
 
-## Learn More
+### Opción A — Todo en Docker (la forma "real", como corre en producción)
 
-To learn more about Next.js, take a look at the following resources:
+1. Copia [.env.example](.env.example) a `.env` (así, sin sufijo — es el que lee `docker-compose`) y rellena los valores reales, usando `db` como host en `DATABASE_URL`.
+2. Levanta todo:
+   ```bash
+   docker compose up --build -d
+   ```
+   Esto crea el contenedor de Postgres (con el schema ya corrido la primera vez) y el de la app, con un volumen aparte para las imágenes subidas.
+3. Abre `http://localhost:3000` (o la IP del equipo, desde otra máquina en la red).
+4. Conéctate a la base con DBeaver en `localhost:5432` (o la IP del equipo) con las credenciales del `.env`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Opción B — Desarrollo híbrido (Postgres en Docker, Next.js con `npm run dev`)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Útil mientras programas, porque tienes hot-reload.
 
-## Deploy on Vercel
+1. Copia [.env.example](.env.example) a `.env.local` (el que lee Next.js) y rellena los valores reales, usando `localhost` como host en `DATABASE_URL`.
+2. Levanta solo la base de datos:
+   ```bash
+   docker compose up -d db
+   ```
+3. Corre la app fuera de Docker:
+   ```bash
+   npm install
+   npm run dev
+   ```
+4. Abre `http://localhost:3000`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+> Si mantienes ambos archivos (`.env` y `.env.local`), mantenlos sincronizados a mano — mismo usuario/contraseña/DB y misma `GEMINI_API_KEY`, solo cambia el host dentro de `DATABASE_URL`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Estructura
+
+- `src/app/` — pantallas (App Router) y rutas de API (`src/app/api/*/route.ts`).
+- `src/lib/` — cliente de Postgres, cliente de Gemini, prompt de análisis, cálculo de estado.
+- `src/types/` — tipos compartidos entre frontend y backend.
+- `soluciones_exactas_schema.sql` — schema completo (se corre solo la primera vez que se crea el contenedor de `db`, vía `docker-entrypoint-initdb.d`).
+- `seed_data.sql` — datos de prueba opcionales, para correr a mano contra la base si los necesitas.
+
+## Aprender más sobre Next.js
+
+- [Documentación de Next.js](https://nextjs.org/docs)
+- [Learn Next.js](https://nextjs.org/learn)

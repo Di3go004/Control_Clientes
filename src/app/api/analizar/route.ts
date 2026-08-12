@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       ],
       config: {
         temperature: 0.1, // Evitar 0 absoluto, a veces causa cortes abruptos en algunos modelos
+        responseMimeType: "application/json", // Fuerza JSON nativo — menos casos para extraerJSON()
         // Eliminamos maxOutputTokens para usar el máximo por defecto del modelo
       },
     });
