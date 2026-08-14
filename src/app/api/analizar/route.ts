@@ -22,6 +22,99 @@ type MimePermitido = (typeof MIME_TYPES_PERMITIDOS)[number];
 // Tamaño máximo: 10 MB
 const MAX_SIZE_BYTES = 10 * 1024 * 1024;
 
+// Reintentos cuando Gemini responde "modelo saturado" (503/UNAVAILABLE) o
+// "límite de uso alcanzado" (429/RESOURCE_EXHAUSTED) — según la propia
+// Google, son picos de demanda normalmente temporales. También reintenta
+// cuando el JSON sale incompleto (ver analizarImagenConReintento). Probado
+// en vivo: de 5 llamadas a la misma imagen, 4 necesitaron 1-2 reintentos
+// por JSON incompleto y 1 se quedó sin intentos con el tope anterior de 3
+// — por eso quedó en 4.
+const INTENTOS_GEMINI = 4;
+const ESPERA_BASE_MS = 2000;
+
+function detalleErrorGemini(error: unknown): { status?: number; mensaje: string } {
+  if (!error || typeof error !== "object") return { mensaje: "" };
+  const status = "status" in error ? (error as { status: unknown }).status : undefined;
+  const mensaje = "message" in error ? String((error as { message: unknown }).message) : "";
+  return { status: typeof status === "number" ? status : undefined, mensaje };
+}
+
+// Caso especial dentro de los 429: la capa gratis de Google AI Studio da un
+// número fijo de análisis AL DÍA (confirmado en producción: 20/día para
+// gemini-3.5-flash — el mensaje de error trae "GenerateRequestsPerDayPerProjectPerModel-FreeTier").
+// Reintentar acá no sirve de nada, no se va a liberar en un par de segundos.
+function esCuotaDiariaAgotada(error: unknown): boolean {
+  const { status, mensaje } = detalleErrorGemini(error);
+  return status === 429 && /PerDay/i.test(mensaje);
+}
+
+// 503 (modelo saturado) o 429 que NO sea la cuota diaria (ej. ráfaga corta
+// de solicitudes) — estos sí vale la pena reintentar en unos segundos.
+function esErrorTemporal(error: unknown): boolean {
+  if (esCuotaDiariaAgotada(error)) return false;
+  const { status, mensaje } = detalleErrorGemini(error);
+  if (status === 503 || status === 429) return true;
+  return /UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand/i.test(mensaje);
+}
+
+function esperar(intento: number) {
+  return new Promise(resolve => setTimeout(resolve, intento * ESPERA_BASE_MS));
+}
+
+interface ResultadoAnalisisGemini {
+  datosExtraidos: Record<string, unknown> | null;
+  textoRespuesta: string;
+  finishReason: unknown;
+}
+
+/**
+ * Llama a Gemini y reintenta hasta INTENTOS_GEMINI veces cuando:
+ *   a) Gemini responde 503/429 (saturado) — se reintenta la llamada tal cual.
+ *   b) Gemini responde 200 pero el texto no parsea como JSON — pasa de vez
+ *      en cuando, incluso con responseMimeType:"application/json" (el
+ *      modelo a veces corta el JSON a medias aunque reporte finishReason
+ *      "STOP", no solo con "MAX_TOKENS"). Como no es determinístico, volver
+ *      a pedirle la misma imagen casi siempre da un JSON completo la
+ *      siguiente vez — confirmado probando la misma captura varias veces.
+ */
+async function analizarImagenConReintento(
+  params: Parameters<typeof gemini.models.generateContent>[0]
+): Promise<ResultadoAnalisisGemini> {
+  let ultimoIntento: ResultadoAnalisisGemini | null = null;
+
+  for (let intento = 1; intento <= INTENTOS_GEMINI; intento++) {
+    const quedanIntentos = intento < INTENTOS_GEMINI;
+    let respuesta;
+
+    try {
+      respuesta = await gemini.models.generateContent(params);
+    } catch (error) {
+      if (!esErrorTemporal(error) || !quedanIntentos) throw error;
+      console.warn(`[/api/analizar] Gemini saturado, reintentando (${intento}/${INTENTOS_GEMINI})…`);
+      await esperar(intento);
+      continue;
+    }
+
+    const textoRespuesta = respuesta.text ?? "";
+    const finishReason = respuesta.candidates?.[0]?.finishReason;
+    const datosExtraidos = extraerJSON(textoRespuesta);
+
+    if (datosExtraidos) {
+      return { datosExtraidos, textoRespuesta, finishReason };
+    }
+
+    ultimoIntento = { datosExtraidos: null, textoRespuesta, finishReason };
+    if (quedanIntentos) {
+      // Sin espera: no es un problema de saturación (eso ya se maneja arriba),
+      // así que no hay razón para no pedirle de inmediato que lo intente de nuevo.
+      console.warn(`[/api/analizar] JSON no parseable (razón: ${finishReason}), reintentando (${intento}/${INTENTOS_GEMINI})…`);
+    }
+  }
+
+  // Se agotaron los intentos sin conseguir un JSON válido.
+  return ultimoIntento!;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1. Leer el form-data
@@ -68,7 +161,9 @@ export async function POST(req: NextRequest) {
     // 4. Enviar a Gemini con el prompt de análisis
     const base64 = buffer.toString("base64");
 
-    const respuesta = await gemini.models.generateContent({
+    // 4 y 5. Enviar a Gemini y parsear el JSON — reintenta sola si Gemini
+    // está saturado o si el JSON sale incompleto (ver analizarImagenConReintento).
+    const { datosExtraidos, textoRespuesta, finishReason } = await analizarImagenConReintento({
       model: MODELO,
       contents: [
         {
@@ -87,22 +182,20 @@ export async function POST(req: NextRequest) {
         },
       ],
       config: {
-        temperature: 0,       // máxima determinismo — no queremos creatividad
-        maxOutputTokens: 2048,
+        temperature: 0.1, // Evitar 0 absoluto, a veces causa cortes abruptos en algunos modelos
+        responseMimeType: "application/json", // Fuerza JSON nativo — menos casos para extraerJSON()
+        // Eliminamos maxOutputTokens para usar el máximo por defecto del modelo
       },
     });
 
-    const textoRespuesta = respuesta.text ?? "";
-
-    // 5. Parsear el JSON devuelto por Gemini
-    const datosExtraidos = extraerJSON(textoRespuesta);
-
     if (!datosExtraidos) {
-      console.error("[/api/analizar] Respuesta de Gemini no parseable:", textoRespuesta);
+      console.error(`[/api/analizar] Respuesta de Gemini no parseable tras ${INTENTOS_GEMINI} intentos. Razón de corte:`, finishReason);
+      console.error("Último texto devuelto:", textoRespuesta);
       return NextResponse.json(
         {
-          error: "Gemini no devolvió un JSON válido. Intenta con una imagen más nítida.",
-          rawResponse: textoRespuesta, // incluido para debug durante la iteración
+          error: `Gemini devolvió una respuesta incompleta ${INTENTOS_GEMINI} veces seguidas. Intenta de nuevo — normalmente en el siguiente intento sale bien.`,
+          rawResponse: textoRespuesta,
+          finishReason,
         },
         { status: 422 }
       );
@@ -116,6 +209,23 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error("[POST /api/analizar]", error);
+
+    if (esCuotaDiariaAgotada(error)) {
+      return NextResponse.json(
+        {
+          error: "Se acabó la cuota gratis de Gemini por hoy. Vuelve a intentar más tarde o mañana — mientras tanto puedes usar \"Ingreso manual\".",
+        },
+        { status: 429 }
+      );
+    }
+
+    if (esErrorTemporal(error)) {
+      return NextResponse.json(
+        { error: "Gemini está saturado ahorita. Espera unos segundos y presiona \"Analizar captura\" de nuevo." },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { error: "Error interno del servidor" },
       { status: 500 }
