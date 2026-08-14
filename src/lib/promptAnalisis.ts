@@ -29,6 +29,9 @@ Hay 8 formatos, agrupados en 3 tipos. El código del formato siempre aparece vis
 - Fecha (convertir al formato YYYY-MM-DD)
 - Nombre del cliente / empresa
 - "Atención de" (nombre del contacto en el cliente)
+- Teléfono de contacto
+- Correo electrónico de contacto
+- Dirección (el sitio/finca visitado, tal como aparece en ESTE documento — no lo inventes si no aparece)
 - Técnico que realizó el servicio
 - Elaborado por
 - Actividad: exactamente "CALIBRACIÓN" o "SERVICIO TÉCNICO"
@@ -45,6 +48,12 @@ Por cada equipo extrae:
 - serie (si dice "S/S", "s/s" o no aparece → null)
 - capacidad (ej. "6 000 x 1 kg")
 - codigo_interno (si aparece)
+- usuario: el responsable de este equipo específico. Si el documento no da un
+  responsable distinto por cada equipo, usa el mismo valor de "Atención de"
+  del encabezado para todos los equipos.
+- area: la ubicación de este equipo específico (ej. "Producción", "Bodega").
+  Si el documento tiene un único campo "Ubicación del equipo" en el
+  encabezado que aplica a todos, usa ese mismo valor para cada equipo.
 
 ## Reglas estrictas
 1. Devuelve ÚNICAMENTE el objeto JSON, sin ningún texto antes ni después.
@@ -61,6 +70,9 @@ Por cada equipo extrae:
   "fecha": "2024-06-15",
   "nombre_cliente": "Guatemala de Moldeados, S.A.",
   "atencion_de": "Ing. Morales",
+  "telefono": "2234-5678",
+  "correo_electronico": "ing.morales@guatemoldeados.com",
+  "direccion": "Zona Industrial, Guatemala",
   "tecnico": "A. García",
   "elaboracion": "A. García",
   "actividad": "CALIBRACIÓN",
@@ -75,7 +87,9 @@ Por cada equipo extrae:
       "modelo": "ICS445",
       "serie": "B123456789",
       "capacidad": "150 x 0.05 kg",
-      "codigo_interno": null
+      "codigo_interno": null,
+      "usuario": "Ing. Morales",
+      "area": "Producción"
     }
   ]
 }

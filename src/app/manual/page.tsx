@@ -2,40 +2,54 @@
 // src/app/manual/page.tsx — Ingreso manual de órdenes de trabajo
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, X, Plus, Trash2, CheckCircle2, AlertCircle, Loader2, Gauge, Wrench, Cpu } from "lucide-react";
+import { Save, X, Plus, Trash2, CheckCircle2, AlertCircle, Loader2, Gauge, Wrench, Cpu, UserPlus } from "lucide-react";
 import type { TipoFormato, Actividad, Cliente } from "@/types";
 import { FRECUENCIAS } from "@/lib/calcularProximoServicio";
 import { useAutoDismiss } from "@/hooks/useAutoDismiss";
+import CrearClienteInline from "@/components/CrearClienteInline";
 
-const FORMATOS: { codigo: TipoFormato; label: string; grupo: string }[] = [
-  { codigo: "FO-IPFNA-007", label: "007 – Calibración", grupo: "Calibración" },
-  { codigo: "FO-IPFNA-008", label: "008 – Calibración", grupo: "Calibración" },
-  { codigo: "FO-IPFNA-009", label: "009 – Calibración", grupo: "Calibración" },
-  { codigo: "FO-SE-040",    label: "040 – Servicio técnico", grupo: "Servicio técnico" },
-  { codigo: "FO-SE-041",    label: "041 – Servicio técnico", grupo: "Servicio técnico" },
-  { codigo: "FO-SE-042",    label: "042 – Servicio técnico", grupo: "Servicio técnico" },
-  { codigo: "FO-SE-062",    label: "062 – Equipo especial", grupo: "Equipo especial" },
-  { codigo: "FO-SE-063",    label: "063 – Equipo especial", grupo: "Equipo especial" },
+// La actividad de cada formato es fija — no la elige quien llena la orden.
+// "grupo" define si lleva tabla de equipos repetible (Servicio técnico y
+// Equipo especial sí; Calibración pura no) y es independiente de
+// "actividad": el 062 lleva tabla de equipos PERO su actividad es
+// calibración, no servicio técnico — por eso están separados.
+const FORMATOS: { codigo: TipoFormato; label: string; grupo: string; actividad: Actividad }[] = [
+  { codigo: "FO-IPFNA-007", label: "007 – Calibración", grupo: "Calibración", actividad: "CALIBRACIÓN" },
+  { codigo: "FO-IPFNA-008", label: "008 – Calibración", grupo: "Calibración", actividad: "CALIBRACIÓN" },
+  { codigo: "FO-IPFNA-009", label: "009 – Calibración", grupo: "Calibración", actividad: "CALIBRACIÓN" },
+  { codigo: "FO-SE-040",    label: "040 – Servicio técnico", grupo: "Servicio técnico", actividad: "SERVICIO TÉCNICO" },
+  { codigo: "FO-SE-041",    label: "041 – Servicio técnico", grupo: "Servicio técnico", actividad: "SERVICIO TÉCNICO" },
+  { codigo: "FO-SE-042",    label: "042 – Servicio técnico", grupo: "Servicio técnico", actividad: "SERVICIO TÉCNICO" },
+  { codigo: "FO-SE-062",    label: "062 – Equipo especial (calibración)", grupo: "Equipo especial", actividad: "CALIBRACIÓN" },
+  { codigo: "FO-SE-063",    label: "063 – Equipo especial (servicio técnico)", grupo: "Equipo especial", actividad: "SERVICIO TÉCNICO" },
 ];
 
 const GRUPOS = ["Calibración", "Servicio técnico", "Equipo especial"];
-const ACTIVIDADES: Actividad[] = ["CALIBRACIÓN", "SERVICIO TÉCNICO"];
 
-type EquipoForm = { marca: string; modelo: string; serie: string; capacidad: string; codigo_interno: string; frecuencia: string };
-const equipoVacio = (): EquipoForm => ({ marca: "", modelo: "", serie: "", capacidad: "", codigo_interno: "", frecuencia: "" });
+type EquipoForm = {
+  marca: string; modelo: string; serie: string; capacidad: string; codigo_interno: string;
+  frecuencia: string; usuario: string; area: string;
+};
+const equipoVacio = (): EquipoForm => ({
+  marca: "", modelo: "", serie: "", capacidad: "", codigo_interno: "",
+  frecuencia: "", usuario: "", area: "",
+});
 
 export default function IngresoManual() {
   const router = useRouter();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [formato, setFormato] = useState<TipoFormato | "">("");
   const [clienteId, setClienteId] = useState<number | "">("");
-  const [actividad, setActividad] = useState<Actividad | "">("");
   const [fecha, setFecha] = useState("");
   const [noCorrelativo, setNoCorrelativo] = useState("");
   const [atencionDe, setAtencionDe] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [correoElectronico, setCorreoElectronico] = useState("");
+  const [direccion, setDireccion] = useState("");
   const [tecnico, setTecnico] = useState("");
   const [elaboracion, setElaboracion] = useState("");
   const [codCliente, setCodCliente] = useState("");
+  const [mostrarClienteNuevo, setMostrarClienteNuevo] = useState(false);
   const [descripcion, setDescripcion] = useState("");
   const [noCertificado, setNoCertificado] = useState("");
   const [cotizacion, setCotizacion] = useState("");
@@ -50,11 +64,12 @@ export default function IngresoManual() {
   }, []);
 
   const formatoInfo = FORMATOS.find(f => f.codigo === formato);
-  const esCalibración = formatoInfo?.grupo === "Calibración";
-  // Los formatos IPFNA (calibración pura) no llevan tabla de equipo/repuestos
-  // en el papel — siempre es un solo instrumento por orden, a diferencia de
-  // servicio técnico/equipo especial, que sí pueden traer varios.
-  const permiteMultiplesEquipos = !esCalibración;
+  const actividadFija = formatoInfo?.actividad ?? null;
+  // Los formatos IPFNA (grupo "Calibración") no llevan tabla de equipo/repuestos
+  // en el papel — siempre es un solo instrumento por orden. Equipo especial
+  // (062/063) sí lleva tabla, aunque el 062 también sea de actividad
+  // CALIBRACIÓN — por eso esto va por "grupo", no por "actividad".
+  const permiteMultiplesEquipos = formatoInfo?.grupo !== "Calibración";
 
   // Al elegir un formato, si es de calibración y ya había más de un equipo
   // cargado (por haber tenido antes un formato de servicio técnico
@@ -64,6 +79,26 @@ export default function IngresoManual() {
     if (f.grupo === "Calibración") {
       setEquipos(prev => (prev.length > 1 ? prev.slice(0, 1) : prev));
     }
+  }
+
+  // Al elegir un cliente, precarga los datos que ya se tienen guardados de
+  // él (código, teléfono, correo, dirección) en los campos de la orden —
+  // siguen siendo editables por si el contacto de esta visita es distinto.
+  function seleccionarCliente(id: number | "") {
+    setClienteId(id);
+    if (id === "") return;
+    const cliente = clientes.find(c => c.id === id);
+    if (!cliente) return;
+    setCodCliente(cliente.cod_cliente ?? "");
+    setTelefono(cliente.telefono ?? "");
+    setCorreoElectronico(cliente.correo_electronico ?? "");
+    setDireccion(cliente.direccion ?? "");
+  }
+
+  function agregarClienteNuevo(nuevo: Cliente) {
+    setClientes(prev => [...prev, nuevo].sort((a, b) => a.nombre_empresa.localeCompare(b.nombre_empresa)));
+    seleccionarCliente(nuevo.id);
+    setMostrarClienteNuevo(false);
   }
 
   function setEquipoField(idx: number, key: keyof EquipoForm, val: string) {
@@ -86,9 +121,12 @@ export default function IngresoManual() {
         no_correlativo: noCorrelativo || undefined,
         fecha,
         atencion_de: atencionDe || undefined,
+        telefono: telefono || undefined,
+        correo_electronico: correoElectronico || undefined,
+        direccion: direccion || undefined,
         tecnico: tecnico || undefined,
         elaboracion: elaboracion || undefined,
-        actividad: actividad || undefined,
+        actividad: actividadFija ?? undefined,
         cod_cliente: codCliente || undefined,
         descripcion_trabajo: descripcion || undefined,
         no_certificado_calibracion: noCertificado || undefined,
@@ -102,6 +140,8 @@ export default function IngresoManual() {
           capacidad: eq.capacidad || null,
           codigo_interno: eq.codigo_interno || null,
           frecuencia: eq.frecuencia || null,
+          usuario: eq.usuario || null,
+          area: eq.area || null,
         })),
       };
 
@@ -235,17 +275,27 @@ export default function IngresoManual() {
             <div className="form-grid">
               <div className="field">
                 <label>Cliente *</label>
-                <select value={clienteId} onChange={e => setClienteId(Number(e.target.value) || "")}>
-                  <option value="">— Selecciona —</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_empresa}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select style={{ flex: 1 }} value={clienteId} onChange={e => seleccionarCliente(Number(e.target.value) || "")}>
+                    <option value="">— Selecciona —</option>
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_empresa}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setMostrarClienteNuevo(v => !v)}
+                    title="Dar de alta un cliente nuevo"
+                    style={{ padding: "0 10px" }}
+                  >
+                    <UserPlus size={14} strokeWidth={2} />
+                  </button>
+                </div>
               </div>
               <div className="field">
                 <label>Actividad</label>
-                <select value={actividad} onChange={e => setActividad(e.target.value as Actividad)}>
-                  <option value="">— Selecciona —</option>
-                  {ACTIVIDADES.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
+                {/* Fija según el formato — no se elige a mano, cada código
+                    de formato es siempre la misma actividad. */}
+                <input value={actividadFija ?? "— Elige un formato —"} readOnly style={{ background: "var(--surface-low)", color: "var(--text-variant)" }} />
               </div>
               <div className="field">
                 <label>Fecha *</label>
@@ -260,6 +310,14 @@ export default function IngresoManual() {
                 <input value={atencionDe} onChange={e => setAtencionDe(e.target.value)} />
               </div>
               <div className="field">
+                <label>Teléfono</label>
+                <input value={telefono} onChange={e => setTelefono(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>Correo electrónico</label>
+                <input value={correoElectronico} onChange={e => setCorreoElectronico(e.target.value)} />
+              </div>
+              <div className="field">
                 <label>Técnico</label>
                 <input value={tecnico} onChange={e => setTecnico(e.target.value)} />
               </div>
@@ -268,21 +326,26 @@ export default function IngresoManual() {
                 <input value={elaboracion} onChange={e => setElaboracion(e.target.value)} />
               </div>
               <div className="field">
+                <label>Dirección</label>
+                <input value={direccion} onChange={e => setDireccion(e.target.value)} />
+              </div>
+              <div className="field">
                 <label>Cód. cliente</label>
                 <input value={codCliente} onChange={e => setCodCliente(e.target.value)} />
               </div>
-              {esCalibración && (
+              {/* Calibración lleva certificado Y cotización — el papel trae los dos.
+                  Servicio técnico solo lleva cotización. Esto va por actividad,
+                  no por grupo: el 062 es "Equipo especial" pero es calibración. */}
+              {actividadFija === "CALIBRACIÓN" && (
                 <div className="field">
                   <label>No. certificado de calibración</label>
                   <input value={noCertificado} onChange={e => setNoCertificado(e.target.value)} placeholder="CERT-2024-001" />
                 </div>
               )}
-              {!esCalibración && (
-                <div className="field">
-                  <label>Cotización</label>
-                  <input value={cotizacion} onChange={e => setCotizacion(e.target.value)} />
-                </div>
-              )}
+              <div className="field">
+                <label>Cotización</label>
+                <input value={cotizacion} onChange={e => setCotizacion(e.target.value)} />
+              </div>
               <div className="field span-3">
                 <label>Descripción del trabajo</label>
                 <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} />
@@ -292,6 +355,13 @@ export default function IngresoManual() {
                 <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} style={{ minHeight: 56 }} />
               </div>
             </div>
+
+            {mostrarClienteNuevo && (
+              <CrearClienteInline
+                onCreado={agregarClienteNuevo}
+                onCancelar={() => setMostrarClienteNuevo(false)}
+              />
+            )}
           </div>
 
           {/* Equipos */}
@@ -330,6 +400,8 @@ export default function IngresoManual() {
                         {FRECUENCIAS.map(f => <option key={f.valor} value={f.valor}>{f.label}</option>)}
                       </select>
                     </div>
+                    <div className="field"><label>Usuario</label><input value={eq.usuario} placeholder="Responsable de este equipo" onChange={e => setEquipoField(idx, "usuario", e.target.value)} /></div>
+                    <div className="field"><label>Ubicación</label><input value={eq.area} placeholder="ej. Producción" onChange={e => setEquipoField(idx, "area", e.target.value)} /></div>
                   </div>
                 </div>
               ))}

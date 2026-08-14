@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
       const [orden] = await tx`
         INSERT INTO ordenes_trabajo (
           cliente_id, tipo_formato, no_correlativo, fecha,
-          atencion_de, tecnico, elaboracion, actividad,
+          atencion_de, telefono, correo_electronico, direccion,
+          tecnico, elaboracion, actividad,
           cod_cliente, descripcion_trabajo,
           no_certificado_calibracion, cotizacion, observaciones,
           fuente, imagen_url
@@ -55,6 +56,9 @@ export async function POST(req: NextRequest) {
           ${body.no_correlativo ?? null},
           ${body.fecha},
           ${body.atencion_de ?? null},
+          ${body.telefono ?? null},
+          ${body.correo_electronico ?? null},
+          ${body.direccion ?? null},
           ${body.tecnico ?? null},
           ${body.elaboracion ?? null},
           ${body.actividad ?? null},

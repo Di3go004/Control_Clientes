@@ -2,10 +2,12 @@
 // src/app/revisar/page.tsx — Revisión y confirmación de datos extraídos por IA
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, ArrowLeft, Plus, Trash2, CheckCircle2, AlertCircle, Info, Loader2 } from "lucide-react";
+import { Save, ArrowLeft, Plus, Trash2, CheckCircle2, AlertCircle, Info, Loader2, UserPlus } from "lucide-react";
 import type { DatosExtraidos, EquipoExtraido, TipoFormato, Actividad, Cliente } from "@/types";
 import { FRECUENCIAS } from "@/lib/calcularProximoServicio";
 import { useAutoDismiss } from "@/hooks/useAutoDismiss";
+import { encontrarClienteCoincidente } from "@/lib/coincidirCliente";
+import CrearClienteInline from "@/components/CrearClienteInline";
 
 const FORMATOS: TipoFormato[] = [
   "FO-IPFNA-007","FO-IPFNA-008","FO-IPFNA-009",
@@ -27,11 +29,9 @@ export default function RevisarDatos() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useAutoDismiss<string>();
   const [exito, setExito] = useState(false);
+  const [mostrarClienteNuevo, setMostrarClienteNuevo] = useState(false);
 
   useEffect(() => {
-    // Cargar clientes para el selector
-    fetch("/api/clientes").then(r => r.json()).then(setClientes);
-
     // Recuperar resultado del análisis
     const raw = sessionStorage.getItem("analisis_resultado");
     if (!raw) { router.replace("/subir"); return; }
@@ -42,8 +42,33 @@ export default function RevisarDatos() {
     // lo que vino de /subir", no algo separable en render puro.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setImagenUrl(imagen_url);
-    setForm({ ...datos, cliente_id: "" });
+
+    // Cargar clientes y, si el nombre que detectó Gemini coincide con
+    // confianza con alguno ya registrado, preseleccionarlo — el técnico
+    // igual puede cambiarlo, esto solo le ahorra buscarlo a mano cada vez.
+    // Si Gemini no extrajo teléfono/correo/dirección de la imagen, usa los
+    // que ya se tienen guardados del cliente como punto de partida — lo
+    // que sí venga leído del documento tiene prioridad.
+    fetch("/api/clientes")
+      .then(r => r.json())
+      .then((data: Cliente[]) => {
+        setClientes(data);
+        const coincidencia = encontrarClienteCoincidente(datos.nombre_cliente, data);
+        setForm({
+          ...datos,
+          cliente_id: coincidencia?.id ?? "",
+          telefono: datos.telefono ?? coincidencia?.telefono ?? null,
+          correo_electronico: datos.correo_electronico ?? coincidencia?.correo_electronico ?? null,
+          direccion: datos.direccion ?? coincidencia?.direccion ?? null,
+        });
+      });
   }, [router]);
+
+  function agregarClienteNuevo(nuevo: Cliente) {
+    setClientes(prev => [...prev, nuevo].sort((a, b) => a.nombre_empresa.localeCompare(b.nombre_empresa)));
+    setField("cliente_id", nuevo.id);
+    setMostrarClienteNuevo(false);
+  }
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => prev ? { ...prev, [key]: value } : prev);
@@ -59,7 +84,7 @@ export default function RevisarDatos() {
   }
 
   function addEquipo() {
-    setForm(prev => prev ? { ...prev, equipos: [...prev.equipos, { marca: null, modelo: null, serie: null, capacidad: null, codigo_interno: null, frecuencia: null }] } : prev);
+    setForm(prev => prev ? { ...prev, equipos: [...prev.equipos, { marca: null, modelo: null, serie: null, capacidad: null, codigo_interno: null, frecuencia: null, usuario: null, area: null }] } : prev);
   }
 
   function removeEquipo(idx: number) {
@@ -83,6 +108,9 @@ export default function RevisarDatos() {
         no_correlativo: form.no_correlativo,
         fecha: form.fecha,
         atencion_de: form.atencion_de,
+        telefono: form.telefono,
+        correo_electronico: form.correo_electronico,
+        direccion: form.direccion,
         tecnico: form.tecnico,
         elaboracion: form.elaboracion,
         actividad: form.actividad,
@@ -166,10 +194,21 @@ export default function RevisarDatos() {
         <div className="form-grid">
           <div className="field">
             <label>Cliente *</label>
-            <select value={form.cliente_id} onChange={e => setField("cliente_id", Number(e.target.value) || "")}>
-              <option value="">— Selecciona cliente —</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_empresa}</option>)}
-            </select>
+            <div style={{ display: "flex", gap: 6 }}>
+              <select style={{ flex: 1 }} value={form.cliente_id} onChange={e => setField("cliente_id", Number(e.target.value) || "")}>
+                <option value="">— Selecciona cliente —</option>
+                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre_empresa}</option>)}
+              </select>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setMostrarClienteNuevo(v => !v)}
+                title="Dar de alta un cliente nuevo"
+                style={{ padding: "0 10px" }}
+              >
+                <UserPlus size={14} strokeWidth={2} />
+              </button>
+            </div>
             {form.nombre_cliente && <small style={{ color: "var(--muted)", marginTop: 2 }}>Gemini detectó: &quot;{form.nombre_cliente}&quot;</small>}
           </div>
           <div className="field">
@@ -199,12 +238,24 @@ export default function RevisarDatos() {
             <input value={form.atencion_de ?? ""} onChange={e => setField("atencion_de", e.target.value)} />
           </div>
           <div className="field">
+            <label>Teléfono</label>
+            <input value={form.telefono ?? ""} onChange={e => setField("telefono", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Correo electrónico</label>
+            <input value={form.correo_electronico ?? ""} onChange={e => setField("correo_electronico", e.target.value)} />
+          </div>
+          <div className="field">
             <label>Técnico</label>
             <input value={form.tecnico ?? ""} onChange={e => setField("tecnico", e.target.value)} />
           </div>
           <div className="field">
             <label>Elaborado por</label>
             <input value={form.elaboracion ?? ""} onChange={e => setField("elaboracion", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Dirección</label>
+            <input value={form.direccion ?? ""} onChange={e => setField("direccion", e.target.value)} />
           </div>
           <div className="field">
             <label>Cód. cliente</label>
@@ -227,6 +278,14 @@ export default function RevisarDatos() {
             <textarea value={form.observaciones ?? ""} onChange={e => setField("observaciones", e.target.value)} style={{ minHeight: 56 }} />
           </div>
         </div>
+
+        {mostrarClienteNuevo && (
+          <CrearClienteInline
+            nombreSugerido={form.nombre_cliente}
+            onCreado={agregarClienteNuevo}
+            onCancelar={() => setMostrarClienteNuevo(false)}
+          />
+        )}
       </div>
 
       {/* --- Equipos --- */}
@@ -262,6 +321,8 @@ export default function RevisarDatos() {
                     {FRECUENCIAS.map(f => <option key={f.valor} value={f.valor}>{f.label}</option>)}
                   </select>
                 </div>
+                <div className="field"><label>Usuario</label><input value={eq.usuario ?? ""} placeholder="Responsable de este equipo" onChange={e => setEquipo(idx, "usuario", e.target.value)} /></div>
+                <div className="field"><label>Ubicación</label><input value={eq.area ?? ""} placeholder="ej. Producción" onChange={e => setEquipo(idx, "area", e.target.value)} /></div>
               </div>
             </div>
           ))}

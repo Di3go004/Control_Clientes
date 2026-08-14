@@ -65,6 +65,9 @@ CREATE TABLE ordenes_trabajo (
     no_correlativo              TEXT,
     fecha                       DATE NOT NULL,
     atencion_de                 TEXT,
+    telefono                    TEXT,       -- teléfono de contacto de ESTA orden (puede variar de una visita a otra)
+    correo_electronico          TEXT,       -- correo de contacto de ESTA orden
+    direccion                   TEXT,       -- sitio/finca visitado en ESTA orden (puede diferir de la dirección principal del cliente)
     tecnico                     TEXT,
     elaboracion                 TEXT,
     actividad                   TEXT CHECK (actividad IN ('CALIBRACIÓN', 'SERVICIO TÉCNICO')),

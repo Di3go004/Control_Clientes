@@ -55,6 +55,11 @@ export interface OrdenTrabajo {
   no_correlativo: string | null;
   fecha: string;
   atencion_de: string | null;
+  // Contacto/sitio de ESTA orden en concreto — puede diferir de los datos
+  // guardados en el cliente si cambia quién atendió o dónde se hizo el servicio.
+  telefono: string | null;
+  correo_electronico: string | null;
+  direccion: string | null;
   tecnico: string | null;
   elaboracion: string | null;
   actividad: Actividad | null;
@@ -103,6 +108,9 @@ export interface CrearOrdenPayload {
   no_correlativo?: string;
   fecha: string; // ISO: "2024-06-15"
   atencion_de?: string;
+  telefono?: string;
+  correo_electronico?: string;
+  direccion?: string;
   tecnico?: string;
   elaboracion?: string;
   actividad?: Actividad;
@@ -131,6 +139,11 @@ export interface EquipoExtraido {
   serie: string | null;
   capacidad: string | null;
   codigo_interno: string | null;
+  // Responsable y ubicación de ESTE equipo en particular — Gemini los
+  // completa con el valor del encabezado (Atención de / Ubicación del
+  // equipo) cuando el formulario no da uno específico por equipo.
+  usuario: string | null;
+  area: string | null;
   // Gemini nunca la extrae (no viene en el papel) — la asigna la persona
   // que revisa, a mano, en la pantalla de revisión.
   frecuencia: string | null;
@@ -149,6 +162,9 @@ export interface DatosExtraidos {
   fecha: string | null;
   nombre_cliente: string | null;   // texto libre — el usuario elige el cliente_id en la revisión
   atencion_de: string | null;
+  telefono: string | null;
+  correo_electronico: string | null;
+  direccion: string | null;
   tecnico: string | null;
   elaboracion: string | null;
   actividad: Actividad | null;
